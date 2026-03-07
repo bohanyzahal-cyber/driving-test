@@ -1256,8 +1256,11 @@
                     <select id="examVehicleType">
                         <option value="">-</option>
                         <option value="B">B - פרטי</option>
+                        <option value="B אוטומט">B אוטומט</option>
                         <option value="C1">C1 - משא קל</option>
+                        <option value="C1 אוטומט">C1 אוטומט</option>
                         <option value="C">C - משא כבד</option>
+                        <option value="C אוטומט">C אוטומט</option>
                         <option value="D">D - אוטובוס</option>
                         <option value="A">A - אופנוע</option>
                         <option value="A1">A1 - אופנוע קל</option>
@@ -1930,20 +1933,34 @@
     }
 
     function updateSchoolSelect() {
-        const area = document.getElementById('planArea').value;
-        const schools = schoolMap[area] || [];
         const examSchool = document.getElementById('examSchool');
         examSchool.innerHTML = '<option value="">בחר בי"ס...</option>';
-        schools.forEach(s => {
-            examSchool.innerHTML += `<option value="${s}">${s}</option>`;
-        });
+
+        // הצג רק בתי ספר שמופיעים בתכנון
+        const planSchools = [...new Set(planRows.map(r => r.school).filter(s => s))];
+
+        if (planSchools.length > 0) {
+            planSchools.forEach(s => {
+                examSchool.innerHTML += `<option value="${s}">${s}</option>`;
+            });
+        } else {
+            // אם אין תכנון - הצג את כל בתי הספר באזור (fallback)
+            const area = document.getElementById('planArea').value;
+            const schools = schoolMap[area] || [];
+            schools.forEach(s => {
+                examSchool.innerHTML += `<option value="${s}">${s}</option>`;
+            });
+        }
     }
 
     // מפת תיאורי דרגות
     const vehicleTypeLabels = {
         'B': 'B - פרטי',
+        'B אוטומט': 'B אוטומט',
         'C1': 'C1 - משא קל',
+        'C1 אוטומט': 'C1 אוטומט',
         'C': 'C - משא כבד',
+        'C אוטומט': 'C אוטומט',
         'D': 'D - אוטובוס',
         'A': 'A - אופנוע',
         'A1': 'A1 - אופנוע קל',
@@ -2002,7 +2019,16 @@
         }
 
         // סנן דרגות לפי מה שמוגדר בתכנון עבור בי"ס זה
-        const uniqueTypes = [...new Set(matchingRows.map(r => r.type).filter(t => t))];
+        // כולל זיהוי אוטומטי של רכב אוטומט (מספר רכב שמסתיים ב-"א")
+        const typesFromPlan = matchingRows.map(r => {
+            let type = r.type || '';
+            // אם מספר הרכב מסתיים ב-"א" והדרגה היא B/C1/C - הפוך לאוטומט
+            if (r.carNumber && r.carNumber.endsWith('א') && ['B', 'C1', 'C'].includes(type)) {
+                type = type + ' אוטומט';
+            }
+            return type;
+        }).filter(t => t);
+        const uniqueTypes = [...new Set(typesFromPlan)];
 
         if (uniqueTypes.length > 0) {
             // הצג רק דרגות שמופיעות בתכנון
@@ -2020,6 +2046,15 @@
             // אין דרגות בתכנון - הצג את כל האפשרויות
             resetVehicleTypeOptions();
         }
+    }
+
+    // זיהוי דרגה מתוך שורת תכנון (כולל אוטומט לפי מספר רכב)
+    function getTypeFromPlanRow(row) {
+        let type = row.type || '';
+        if (row.carNumber && row.carNumber.endsWith('א') && ['B', 'C1', 'C'].includes(type)) {
+            type = type + ' אוטומט';
+        }
+        return type;
     }
 
     // עדכון דרגה כשבוחרים מספר רכב מהרשימה
@@ -2041,7 +2076,8 @@
         // מצא את השורה המתאימה בטבלת התכנון
         const matchingRow = planRows.find(row => row.school === selectedSchool && row.carNumber === selectedCar);
         if (matchingRow && matchingRow.type) {
-            vehicleTypeSelect.value = matchingRow.type;
+            const autoType = getTypeFromPlanRow(matchingRow);
+            vehicleTypeSelect.value = autoType;
         }
     }
 
@@ -2713,8 +2749,11 @@
                     <select onchange="updatePlanRow(${idx}, 'type', this.value)">
                         <option value="">-</option>
                         <option value="B">B</option>
+                        <option value="B אוטומט">B אוטומט</option>
                         <option value="C1">C1</option>
+                        <option value="C1 אוטומט">C1 אוטומט</option>
                         <option value="C">C</option>
+                        <option value="C אוטומט">C אוטומט</option>
                         <option value="D">D</option>
                         <option value="A">A</option>
                         <option value="A1">A1</option>
@@ -3169,7 +3208,12 @@
         document.getElementById('examFirstName').value = ex.firstName;
         document.getElementById('examLastName').value = ex.lastName;
         document.getElementById('examID').value = ex.id;
-        document.getElementById('examSchool').value = ex.school;
+        // אם בי"ס של הנבחן לא ברשימה (לא בתכנון), הוסף אותו
+        const examSchoolSelect = document.getElementById('examSchool');
+        if (ex.school && !examSchoolSelect.querySelector(`option[value="${ex.school}"]`)) {
+            examSchoolSelect.innerHTML += `<option value="${ex.school}">${ex.school}</option>`;
+        }
+        examSchoolSelect.value = ex.school;
 
         // עדכן רשימת מספרי רכב לפי בית הספר הנבחר
         const carSelect = document.getElementById('examCarSelect');
@@ -4063,7 +4107,7 @@
                 let passKadatz = 0, passVoucher = 0, passArmy = 0, passOther = 0;
                 let failKadatz = 0, failVoucher = 0, failArmy = 0, failOther = 0;
 
-                const type = row.type || '';
+                const type = getTypeFromPlanRow(row);
 
                 examinees.forEach(ex => {
                     // התאמה: לפי בי"ס, ואם יש רכב/דרגה בתכנון - גם לפיהם
@@ -4124,7 +4168,7 @@
                 tr.dataset.rowIndex = planRows.indexOf(row);
                 tr.innerHTML = `
                     <td style="text-align: right;">${row.school || '-'}</td>
-                    <td>${row.type || '-'}</td>
+                    <td>${type || row.type || '-'}</td>
                     <td>${row.carNumber || '-'}</td>
                     <td>${row.countRequested || ''}</td>
                     <td>${row.countApproved || ''}</td>
