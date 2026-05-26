@@ -3671,6 +3671,7 @@
             planRows: planRows,
             examinees: examinees,
             importedTesters: importedTesters,
+            otherTestersSummaries: otherTestersSummaries, // בוחנים שהבוחן האחראי הזין ידנית
             reportManualOverrides: reportManualOverrides,
             reportNotes: document.getElementById('reportNotesInput')?.value || '',
         };
@@ -3704,6 +3705,7 @@
             planRows = data.planRows || [];
             examinees = data.examinees || [];
             importedTesters = data.importedTesters || [];
+            otherTestersSummaries = data.otherTestersSummaries || [];
             reportManualOverrides = data.reportManualOverrides || {};
 
             // באנר עליון כדי שיהיה ברור שזה דו"ח שהתקבל
