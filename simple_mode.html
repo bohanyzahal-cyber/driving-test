@@ -3669,6 +3669,7 @@
             areaCode: document.getElementById('areaCode').value || '',
             isMainTester: document.getElementById('isMainTester').checked,
             planRows: planRows,
+            testerRows: testerRows, // טבלת "בוחנים באזור" - שמות הבוחנים שעובדים אותו אזור
             examinees: examinees,
             importedTesters: importedTesters,
             otherTestersSummaries: otherTestersSummaries, // בוחנים שהבוחן האחראי הזין ידנית
@@ -3703,6 +3704,7 @@
             document.getElementById('isMainTester').checked = !!data.isMainTester;
 
             planRows = data.planRows || [];
+            testerRows = data.testerRows || [];
             examinees = data.examinees || [];
             importedTesters = data.importedTesters || [];
             otherTestersSummaries = data.otherTestersSummaries || [];
