@@ -4136,10 +4136,14 @@
         const areaCode = document.getElementById('areaCode').value || '';
         const isMainTester = document.getElementById('isMainTester').checked;
 
-        // כותרת משנה - כוללת את הבוחן הנוכחי + בוחנים מיובאים (קישור) + בוחנים ידניים
+        // כותרת משנה - כוללת את הבוחן הנוכחי + בוחנים מיובאים (קישור) + ידניים + בוחנים שמופיעים בנבחנים
         const importedNames = importedTesters.map(t => t.tester).filter(Boolean);
         const manualNames = otherTestersSummaries.map(t => t.name).filter(Boolean);
-        const otherTesterNames = [...importedNames, ...manualNames];
+        // בוחנים שהבוחן האחראי שייך לנבחנים בשדה examTester (ולא רק הוא עצמו)
+        const examineeTesterNames = [...new Set(
+            examinees.map(ex => (ex.tester || '').trim()).filter(t => t && t !== tester)
+        )];
+        const otherTesterNames = [...new Set([...importedNames, ...manualNames, ...examineeTesterNames])];
         const testersText = isMainTester && otherTesterNames.length > 0
             ? `${tester} (אחראי), ${otherTesterNames.join(', ')}`
             : tester;
@@ -4443,6 +4447,23 @@
                     `;
                     testersTbody.appendChild(tr);
                     addedTesters.add(otherNameNormalized);
+                }
+            });
+            // בוחנים ייחודיים שמופיעים בנבחנים (לכל ex.tester שהוגדר ולא הוסף)
+            const examineeTesterNamesUnique = [...new Set(
+                examinees.map(ex => (ex.tester || '').trim()).filter(Boolean)
+            )];
+            examineeTesterNamesUnique.forEach(exTesterName => {
+                const exNorm = normalizeName(exTesterName);
+                if (exNorm && !addedTesters.has(exNorm)) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${exTesterName}</td>
+                        <td>${testerUrbanCounts[exTesterName] || '-'}</td>
+                        <td>-</td>
+                    `;
+                    testersTbody.appendChild(tr);
+                    addedTesters.add(exNorm);
                 }
             });
         }
