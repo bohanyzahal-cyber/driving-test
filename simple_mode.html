@@ -1383,25 +1383,19 @@
 
         <div id="whatsappButtonsContainer"></div>
 
-        <!-- כפתור ייצוא נתונים - לכל בוחן -->
+        <!-- כפתור שליחה לבוחן אחראי - לכל בוחן רגיל -->
         <div style="margin-top: 20px; background: #e3f2fd; padding: 15px; border-radius: 10px; border: 2px solid #2196F3;">
             <h3 style="margin: 0 0 10px 0; color: #1565C0;">📤 שיתוף נתונים</h3>
-            <p style="font-size: 13px; color: #555; margin-bottom: 10px;">שלח את הנתונים שלך לבוחן האחראי:</p>
+            <p style="font-size: 13px; color: #555; margin-bottom: 10px;">לחץ לפתיחת וואטסאפ עם קישור מוכן - שלח אותו לבוחן האחראי, הוא ילחץ עליו והנתונים יתווספו לדו"ח שלו אוטומטית.</p>
             <button onclick="exportMyData()" style="width: 100%; padding: 15px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px;">
-                📋 העתק נתונים לשליחה
+                📤 שלח לבוחן אחראי
             </button>
-            <div id="exportStatus" style="margin-top: 10px; text-align: center; display: none;"></div>
         </div>
 
-        <!-- קטע ייבוא נתונים - רק לבוחן אחראי -->
+        <!-- קטע נתונים מיובאים - רק לבוחן אחראי -->
         <div id="otherTestersSection" style="display: none; margin-top: 20px; background: #e8f5e9; padding: 15px; border-radius: 10px; border: 2px solid #4CAF50;">
-            <h3 style="margin: 0 0 10px 0; color: #2e7d32;">📥 ייבוא נתונים מבוחנים</h3>
-            <p style="font-size: 13px; color: #555; margin-bottom: 10px;">הדבק כאן את הנתונים שקיבלת מבוחנים אחרים:</p>
-            <textarea id="importDataText" placeholder="הדבק כאן את הנתונים שהתקבלו מבוחן אחר..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; font-size: 14px;"></textarea>
-            <button onclick="importTesterData()" style="width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; margin-top: 10px;">
-                ➕ הוסף נתוני בוחן
-            </button>
-            <div id="importStatus" style="margin-top: 10px; text-align: center;"></div>
+            <h3 style="margin: 0 0 10px 0; color: #2e7d32;">📥 נתונים שהתקבלו מבוחנים אחרים</h3>
+            <p style="font-size: 13px; color: #555; margin-bottom: 10px;">בוחנים שולחים לך קישור בוואטסאפ. לחיצה על הקישור תוסיף את הנתונים שלהם לרשימה כאן באופן אוטומטי.</p>
 
             <!-- רשימת בוחנים שיובאו -->
             <div id="importedTestersList" style="margin-top: 15px;"></div>
@@ -1729,7 +1723,16 @@
         initAreaSelect();
         initSchoolSelect();
         initTestersCheckboxes();
-        loadSavedData();
+
+        // אם הדף נפתח עם קישור דו"ח משותף (#report=...) - טען אותו במצב צפייה
+        // וטדלג על loadSavedData כדי לא לדרוס את הנתונים של המקבל
+        const isSharedReport = loadReportFromHash();
+        if (!isSharedReport) {
+            loadSavedData();
+            // אם הדף נפתח עם קישור #importdata= - הוסף את הבוחן המשותף לרשימה של הבוחן האחראי
+            // קורה אחרי loadSavedData כדי שנתוני הבוחן האחראי יישארו ויתווספו אליהם הנתונים החדשים
+            importDataFromHash();
+        }
         // אתחול תאריך רק אם אין נתונים שמורים
         initDateFieldIfEmpty();
         renderPlanTable();
@@ -2193,7 +2196,12 @@
         }, 100);
     }
 
+    // מצב צפייה בדו"ח משותף: כשפעיל, saveData לא כותב ל-localStorage
+    // כדי שנתוני המקבל לא ידרסו על-ידי הנתונים שהגיעו מהקישור
+    let _viewOnlyMode = false;
+
     function saveData() {
+        if (_viewOnlyMode) return;
         const data = {
             planDate: document.getElementById('planDate').value,
             planDateInput: document.getElementById('planDateInput').value,
@@ -2469,46 +2477,34 @@
             schools: schoolDetails
         };
 
-        // קידוד ל-Base64 מקוצר
+        // קידוד ל-Base64 ובניית קישור שיתוף - בוחן אחראי לוחץ עליו ומקבל את הנתונים אוטומטית
         const jsonStr = JSON.stringify(exportData);
         const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+        const link = `${PUBLIC_REPORT_URL}#importdata=${encoded}`;
 
-        // העתק ללוח
-        navigator.clipboard.writeText(encoded).then(() => {
-            const status = document.getElementById('exportStatus');
-            status.style.display = 'block';
-            const totalPass = summary.passKadatz + summary.passVoucher + summary.passArmy + summary.passOther;
-            const totalFail = summary.failKadatz + summary.failVoucher + summary.failArmy + summary.failOther;
-            status.innerHTML = `<div style="background: #4CAF50; color: white; padding: 10px; border-radius: 5px;">
-                ✅ הועתק! שלח בוואטסאפ לבוחן האחראי<br>
-                <small>(סה"כ: ${totalExams} מבחנים - ${totalPass} עברו, ${totalFail} נכשלו)</small>
-            </div>`;
-        }).catch(() => {
-            // אם לא עובד, הצג בתיבת טקסט
-            prompt('העתק את הטקסט הזה ושלח לבוחן האחראי:', encoded);
-        });
+        const totalPass = summary.passKadatz + summary.passVoucher + summary.passArmy + summary.passOther;
+        const totalFail = summary.failKadatz + summary.failVoucher + summary.failArmy + summary.failOther;
+
+        // הודעה קצרה: שם בוחן + סיכום + קישור
+        let msg = `*📊 נתוני בוחן: ${testerName}*\n`;
+        msg += `סה"כ: ${totalExams} מבחנים (✅${totalPass} ❌${totalFail})\n\n`;
+        msg += `🔗 בוחן אחראי - לחץ לייבוא:\n${link}`;
+
+        // וואטסאפ ייפתח בלי איש קשר ספציפי - הבוחן יבחר את הבוחן האחראי מאנשי הקשר שלו
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
-    // ייבוא נתונים - לבוחן אחראי (סיכום בלבד)
-    function importTesterData() {
-        const text = document.getElementById('importDataText').value.trim();
+    // ייבוא נתוני בוחן מאובייקט שכבר פוענח (גרסת base64 ישנה הוסרה)
+    // נקרא מ-loadFromHash כשבוחן אחראי לוחץ על קישור #importdata=
+    // מחזיר true אם הייבוא הצליח, false אם המשתמש ביטל או נכשל
+    function importTesterDataObject(data) {
         const myAreaCode = document.getElementById('areaCode').value.trim();
-        const status = document.getElementById('importStatus');
-
-        if (!text) {
-            status.innerHTML = '<span style="color: red;">יש להדביק נתונים</span>';
-            return;
-        }
 
         try {
-            // פענוח Base64
-            const jsonStr = decodeURIComponent(escape(atob(text)));
-            const data = JSON.parse(jsonStr);
-
             // בדיקת קוד אזור
             if (myAreaCode && data.code !== myAreaCode) {
                 if (!confirm(`קוד האזור לא תואם!\nשלך: ${myAreaCode}\nהתקבל: ${data.code}\n\nלייבא בכל זאת?`)) {
-                    return;
+                    return false;
                 }
             }
 
@@ -2516,7 +2512,7 @@
             const existingIdx = importedTesters.findIndex(t => t.tester === data.tester);
             if (existingIdx >= 0) {
                 if (!confirm(`נתונים מ"${data.tester}" כבר קיימים. להחליף?`)) {
-                    return;
+                    return false;
                 }
                 importedTesters.splice(existingIdx, 1);
             }
@@ -2644,21 +2640,15 @@
                 schoolsByType: schoolsByType
             });
 
-            // נקה שדה הקלט
-            document.getElementById('importDataText').value = '';
-
-            // עדכן תצוגה
+            // עדכן תצוגה ושמור
             renderImportedTesters();
             saveData();
-
-            const totalPass = summary.passKadatz + summary.passVoucher + summary.passArmy + summary.passOther;
-            const totalFail = summary.failKadatz + summary.failVoucher + summary.failArmy + summary.failOther;
-            const total = totalPass + totalFail;
-            status.innerHTML = `<span style="color: green;">✅ יובא סיכום מ"${data.tester}" (${total} מבחנים: ${totalPass} עברו, ${totalFail} נכשלו)</span>`;
+            return true;
 
         } catch (e) {
-            status.innerHTML = '<span style="color: red;">❌ שגיאה בקריאת הנתונים - ודא שהעתקת נכון</span>';
-            console.error(e);
+            console.error('Import error:', e);
+            alert('❌ שגיאה בייבוא הנתונים - הקישור אינו תקין');
+            return false;
         }
     }
 
@@ -3672,102 +3662,154 @@
         return digits;
     }
 
-    // שליחת דו"ח לרב בוחן - הודעת וואטסאפ
+    // כתובת ציבורית של הדף - הקישור שיישלח לרב בוחן ייפתח כאן
+    const PUBLIC_REPORT_URL = 'https://bohanyzahal-cyber.github.io/driving-test/simple_mode.html';
+
+    // בניית קישור שיתוף שמכיל את כל נתוני הדו"ח מקודדים ב-hash
+    // לחיצה על הקישור פותחת את הדף עם הדו"ח מוצג, בלי לכתוב מעל נתוני המקבל
+    function buildReportShareLink() {
+        const reportData = {
+            v: 1,
+            planDate: document.getElementById('planDate').value || '',
+            planDay: document.getElementById('planDay').value || '',
+            planArea: document.getElementById('planArea').value || '',
+            planTester: document.getElementById('planTester').value || '',
+            areaCode: document.getElementById('areaCode').value || '',
+            isMainTester: document.getElementById('isMainTester').checked,
+            planRows: planRows,
+            examinees: examinees,
+            importedTesters: importedTesters,
+            reportManualOverrides: reportManualOverrides,
+            reportNotes: document.getElementById('reportNotesInput')?.value || '',
+        };
+        const jsonStr = JSON.stringify(reportData);
+        const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+        return `${PUBLIC_REPORT_URL}#report=${encoded}`;
+    }
+
+    // נקרא מ-window.onload: אם הדף נפתח עם קישור דו"ח משותף (#report=) טוען את הנתונים ומציג את הדו"ח
+    // מחזיר true אם נטען דו"ח (כדי לדלג על loadSavedData הרגיל), אחרת false
+    function loadReportFromHash() {
+        const hash = window.location.hash;
+        if (!hash.startsWith('#report=')) return false;
+
+        try {
+            const encoded = hash.substring('#report='.length);
+            const jsonStr = decodeURIComponent(escape(atob(encoded)));
+            const data = JSON.parse(jsonStr);
+
+            // מצב צפייה בלבד - לא לכתוב לזיכרון של המקבל
+            _viewOnlyMode = true;
+
+            // טען לשדות ולמשתנים גלובליים
+            document.getElementById('planDate').value = data.planDate || '';
+            document.getElementById('planDay').value = data.planDay || 'א';
+            document.getElementById('planArea').value = data.planArea || '';
+            document.getElementById('planTester').value = data.planTester || '';
+            document.getElementById('areaCode').value = data.areaCode || '';
+            document.getElementById('isMainTester').checked = !!data.isMainTester;
+
+            planRows = data.planRows || [];
+            examinees = data.examinees || [];
+            importedTesters = data.importedTesters || [];
+            reportManualOverrides = data.reportManualOverrides || {};
+
+            // באנר עליון כדי שיהיה ברור שזה דו"ח שהתקבל
+            const banner = document.createElement('div');
+            banner.id = 'sharedReportBanner';
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#2196F3;color:white;padding:10px 20px;text-align:center;font-weight:bold;z-index:10002;direction:rtl;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,0.3);';
+            banner.textContent = `🔵 צופה בדו"ח שהתקבל מ-${data.planTester || 'בוחן'} (${data.planDate || ''}) — הנתונים שלך לא ייפגעו`;
+            document.body.appendChild(banner);
+
+            // פתח את הדו"ח אחרי שאלמנטים אחרים אותחלו
+            setTimeout(() => {
+                openPrintableReport();
+                const notesInput = document.getElementById('reportNotesInput');
+                if (notesInput && data.reportNotes) notesInput.value = data.reportNotes;
+            }, 500);
+
+            return true;
+        } catch (e) {
+            console.error('Failed to load shared report:', e);
+            alert('שגיאה בטעינת הדו"ח המשותף - הקישור אינו תקין');
+            return false;
+        }
+    }
+
+    // נקרא מ-window.onload אחרי loadSavedData: אם הדף נפתח עם קישור #importdata= מוסיף את הבוחן לרשימת
+    // הבוחנים המיובאים של הבוחן האחראי. מחזיר true אם בוצע ייבוא.
+    function importDataFromHash() {
+        const hash = window.location.hash;
+        if (!hash.startsWith('#importdata=')) return false;
+
+        try {
+            const encoded = hash.substring('#importdata='.length);
+            const jsonStr = decodeURIComponent(escape(atob(encoded)));
+            const data = JSON.parse(jsonStr);
+
+            // ודא שהמשתמש מסומן כבוחן אחראי - אחרת אנחנו בודקים אם להפעיל
+            const isMain = document.getElementById('isMainTester').checked;
+            if (!isMain) {
+                if (!confirm(`התקבלו נתונים מבוחן "${data.tester || 'לא ידוע'}".\nכדי להוסיף אותם אתה צריך להיות מסומן כ"בוחן אחראי".\n\nלהפעיל את המצב הזה ולהוסיף את הנתונים?`)) {
+                    history.replaceState(null, '', location.pathname + location.search);
+                    return false;
+                }
+                document.getElementById('isMainTester').checked = true;
+                toggleMainTesterSection();
+            }
+
+            // בצע ייבוא דרך הפונקציה הקיימת (שמטפלת בכפילות, גרסאות וכו')
+            const ok = importTesterDataObject(data);
+
+            // נקה את ה-hash כדי שריענון לא יוסיף שוב את אותם נתונים
+            history.replaceState(null, '', location.pathname + location.search);
+
+            if (ok) {
+                // הודעה קבועה לבוחן האחראי שהנתונים התקבלו - עם כפתור סגירה
+                const totalPass = (data.summary?.pK || 0) + (data.summary?.pV || 0) + (data.summary?.pA || 0) + (data.summary?.pO || 0);
+                const totalFail = (data.summary?.fK || 0) + (data.summary?.fV || 0) + (data.summary?.fA || 0) + (data.summary?.fO || 0);
+                const total = totalPass + totalFail;
+                const banner = document.createElement('div');
+                banner.id = 'importSuccessBanner';
+                banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#4CAF50;color:white;padding:12px 20px;text-align:center;font-weight:bold;z-index:10002;direction:rtl;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;gap:15px;';
+                banner.innerHTML = `<span>✅ התקבלו נתונים מ-${data.tester} (${total} מבחנים: ${totalPass} עברו, ${totalFail} נכשלו)</span><button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.3);border:none;color:white;padding:5px 12px;border-radius:4px;cursor:pointer;font-weight:bold;">✕ סגור</button>`;
+                document.body.appendChild(banner);
+            }
+            return ok;
+        } catch (e) {
+            console.error('Failed to import from hash:', e);
+            alert('שגיאה בייבוא הנתונים מהקישור');
+            history.replaceState(null, '', location.pathname + location.search);
+            return false;
+        }
+    }
+
+    // שליחת דו"ח לרב בוחן - הודעת וואטסאפ עם קישור לצפייה בדו"ח המלא
     function sendReportToSupervisor() {
         const date = document.getElementById('planDate').value || '';
         const day = document.getElementById('planDay').value || '';
         const area = document.getElementById('planArea').value || '';
         const tester = document.getElementById('planTester').value || '';
-        const areaCode = document.getElementById('areaCode').value || '';
 
-        // חשב סיכומים
-        let passKadatz = 0, passVoucher = 0, passArmy = 0, passOther = 0;
-        let failKadatz = 0, failVoucher = 0, failArmy = 0, failOther = 0;
-
+        // ספירה כללית לכותרת ההודעה
+        let totalPass = 0, totalFail = 0;
         examinees.forEach(ex => {
-            if (!ex.result) return;
-            const pop = ex.population || 'other';
-            if (ex.result === 'pass') {
-                if (pop === 'kadatz') passKadatz++;
-                else if (pop === 'voucher') passVoucher++;
-                else if (pop === 'army') passArmy++;
-                else passOther++;
-            } else if (ex.result === 'fail') {
-                if (pop === 'kadatz') failKadatz++;
-                else if (pop === 'voucher') failVoucher++;
-                else if (pop === 'army') failArmy++;
-                else failOther++;
-            }
+            if (ex.result === 'pass') totalPass++;
+            else if (ex.result === 'fail') totalFail++;
         });
-
-        const totalPass = passKadatz + passVoucher + passArmy + passOther;
-        const totalFail = failKadatz + failVoucher + failArmy + failOther;
         const totalExams = totalPass + totalFail;
 
-        // בנה הודעה
-        let msg = `*📋 דו"ח בוחן - סיום יום*\n`;
-        msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `📅 ${date} ${day ? '(' + day + ')' : ''}\n`;
-        msg += `📍 ${area}\n`;
+        // קישור עם כל הנתונים מקודדים - כשרב בוחן ילחץ הוא יראה את הדו"ח המלא
+        const link = buildReportShareLink();
+
+        // הודעה קצרה: כותרת + סטטוס + קישור
+        let msg = `*📋 דו"ח בוחן - ${date}${day ? ' (' + day + ')' : ''}*\n`;
         msg += `👤 ${tester}\n`;
-        if (areaCode) msg += `🔢 קוד: ${areaCode}\n`;
-        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        msg += `📍 ${area}\n`;
+        msg += `סה"כ: ${totalExams} מבחנים (✅${totalPass} ❌${totalFail})\n\n`;
+        msg += `🔗 צפייה בדו"ח המלא:\n${link}`;
 
-        msg += `*סה"כ: ${totalExams} מבחנים*\n`;
-        msg += `✅ עברו: ${totalPass}\n`;
-        msg += `❌ נכשלו: ${totalFail}\n\n`;
-
-        // פירוט לפי דרגה
-        const byGrade = {};
-        examinees.forEach(ex => {
-            if (!ex.result) return;
-            const grade = ex.vehicleType || 'ללא דרגה';
-            if (!byGrade[grade]) byGrade[grade] = { pass: 0, fail: 0 };
-            if (ex.result === 'pass') byGrade[grade].pass++;
-            else if (ex.result === 'fail') byGrade[grade].fail++;
-        });
-
-        const gradeKeys = Object.keys(byGrade);
-        if (gradeKeys.length > 1) {
-            // הצג פירוט דרגות רק אם יש יותר מדרגה אחת
-            msg += `*פירוט לפי דרגה:*\n`;
-            gradeKeys.forEach(grade => {
-                const g = byGrade[grade];
-                const gradeTotal = g.pass + g.fail;
-                msg += `🚗 ${grade}: ${gradeTotal} (✅${g.pass} ❌${g.fail})\n`;
-            });
-            msg += `\n`;
-        }
-
-        if (totalPass > 0) {
-            msg += `*עברו:* `;
-            let passParts = [];
-            if (passKadatz > 0) passParts.push(`קד"צ ${passKadatz}`);
-            if (passVoucher > 0) passParts.push(`ואוצ'ר ${passVoucher}`);
-            if (passArmy > 0) passParts.push(`צבא ${passArmy}`);
-            if (passOther > 0) passParts.push(`אחר ${passOther}`);
-            msg += passParts.join(', ') + `\n`;
-        }
-
-        if (totalFail > 0) {
-            msg += `*נכשלו:* `;
-            let failParts = [];
-            if (failKadatz > 0) failParts.push(`קד"צ ${failKadatz}`);
-            if (failVoucher > 0) failParts.push(`ואוצ'ר ${failVoucher}`);
-            if (failArmy > 0) failParts.push(`צבא ${failArmy}`);
-            if (failOther > 0) failParts.push(`אחר ${failOther}`);
-            msg += failParts.join(', ') + `\n`;
-        }
-
-        // הערות מהדו"ח
-        const reportNotes = document.getElementById('reportNotesInput')?.value;
-        if (reportNotes && reportNotes.trim()) {
-            msg += `\n*הערות:* ${reportNotes.trim()}\n`;
-        }
-
-        msg += `\n🕐 ${new Date().toLocaleTimeString('he-IL', {hour: '2-digit', minute: '2-digit'})}`;
-
-        // אם נשמר מספר רב בוחן - פתח שיחה ישירה איתו. אחרת התנהגות ישנה (בחירת איש קשר ידנית).
+        // אם נשמר מספר רב בוחן - פתח שיחה ישירה איתו. אחרת בחירת איש קשר ידנית.
         const phone = normalizeIsraeliPhone(document.getElementById('supervisorPhone')?.value || '');
         const encodedMsg = encodeURIComponent(msg);
         if (phone) {
