@@ -4134,11 +4134,12 @@
         const areaCode = document.getElementById('areaCode').value || '';
         const isMainTester = document.getElementById('isMainTester').checked;
 
-        // כותרת משנה
-        let allTesterNames = [tester];
-        importedTesters.forEach(t => allTesterNames.push(t.tester));
-        const testersText = isMainTester && importedTesters.length > 0
-            ? `${tester} (אחראי), ${importedTesters.map(t => t.tester).join(', ')}`
+        // כותרת משנה - כוללת את הבוחן הנוכחי + בוחנים מיובאים (קישור) + בוחנים ידניים
+        const importedNames = importedTesters.map(t => t.tester).filter(Boolean);
+        const manualNames = otherTestersSummaries.map(t => t.name).filter(Boolean);
+        const otherTesterNames = [...importedNames, ...manualNames];
+        const testersText = isMainTester && otherTesterNames.length > 0
+            ? `${tester} (אחראי), ${otherTesterNames.join(', ')}`
             : tester;
 
         // שימוש ב-innerHTML עם non-breaking space כדי לשמור רווחים ב-PDF
@@ -4368,6 +4369,15 @@
             }
         });
 
+        // הוסף כמויות מבוחנים שהוזנו ידנית (טפסי "בוחנים נוספים")
+        otherTestersSummaries.forEach(other => {
+            if (other.name && !testerUrbanCounts[other.name]) {
+                const total = (other.passKadatz || 0) + (other.passVoucher || 0) + (other.passArmy || 0) + (other.passOther || 0) +
+                             (other.failKadatz || 0) + (other.failVoucher || 0) + (other.failArmy || 0) + (other.failOther || 0);
+                testerUrbanCounts[other.name] = total;
+            }
+        });
+
         // טבלת בוחנים - עם כמות עירוני מעודכנת
         const testersTbody = document.querySelector('#reportTestersTable tbody');
         if (testersTbody) {
@@ -4417,6 +4427,20 @@
                     `;
                     testersTbody.appendChild(tr);
                     addedTesters.add(importedNameNormalized);
+                }
+            });
+            // בוחנים שהוזנו ידנית (טפסי "בוחנים נוספים")
+            otherTestersSummaries.forEach(other => {
+                const otherNameNormalized = normalizeName(other.name);
+                if (otherNameNormalized && !addedTesters.has(otherNameNormalized)) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${other.name}</td>
+                        <td>${testerUrbanCounts[other.name] || '-'}</td>
+                        <td>-</td>
+                    `;
+                    testersTbody.appendChild(tr);
+                    addedTesters.add(otherNameNormalized);
                 }
             });
         }
@@ -4496,7 +4520,7 @@
             }
         });
 
-        // הוסף סיכומים מבוחנים מיובאים
+        // הוסף סיכומים מבוחנים מיובאים (דרך קישור #importdata=)
         importedTesters.forEach(imported => {
             if (imported.summary) {
                 testerSummaries[imported.tester] = {
@@ -4509,6 +4533,26 @@
                     failVoucher: imported.summary.failVoucher || 0,
                     failArmy: imported.summary.failArmy || 0,
                     failOther: imported.summary.failOther || 0
+                };
+            }
+        });
+
+        // הוסף סיכומים שהוזנו ידנית לבוחנים שלא משתמשים בטופס
+        // (טפסי "בוחנים נוספים" שהבוחן האחראי ממלא עבורם)
+        otherTestersSummaries.forEach(other => {
+            if (!other.name) return;
+            // אם הבוחן כבר קיים (יובא דרך קישור) - לא לדרוס. אחרת להוסיף שורה.
+            if (!testerSummaries[other.name]) {
+                testerSummaries[other.name] = {
+                    name: other.name,
+                    passKadatz: other.passKadatz || 0,
+                    passVoucher: other.passVoucher || 0,
+                    passArmy: other.passArmy || 0,
+                    passOther: other.passOther || 0,
+                    failKadatz: other.failKadatz || 0,
+                    failVoucher: other.failVoucher || 0,
+                    failArmy: other.failArmy || 0,
+                    failOther: other.failOther || 0
                 };
             }
         });
