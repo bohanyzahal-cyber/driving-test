@@ -1150,6 +1150,16 @@
             </small>
         </div>
 
+        <!-- טלפון רב בוחן - שמירה קבועה בין מבחנים -->
+        <div class="form-group" style="background: #f3e5f5; padding: 15px; border-radius: 8px; border: 2px solid #9c27b0;">
+            <label style="color: #6a1b9a; font-size: 16px;">📞 טלפון רב בוחן (לשליחת דו"ח בלחיצה אחת):</label>
+            <input type="tel" id="supervisorPhone" placeholder="050-1234567" onchange="saveData()"
+                style="width: 100%; padding: 10px; margin-top: 8px; border: 1px solid #ce93d8; border-radius: 5px; font-size: 16px; direction: ltr; text-align: right;">
+            <small style="color: #6a1b9a; font-size: 11px; display: block; margin-top: 5px;">
+                המספר נשמר במכשיר - מספיק להזין פעם אחת. בסיום היום הכפתור "📤 שלח לרב בוחן" יפתח וואטסאפ ישירות אליו.
+            </small>
+        </div>
+
         <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="isMainTester" onchange="toggleMainTesterSection()" style="width: 20px; height: 20px;">
             <label for="isMainTester" style="margin: 0; cursor: pointer;">אני בוחן אחראי (אאסוף נתונים מבוחנים אחרים)</label>
@@ -2124,6 +2134,7 @@
             document.getElementById('additionalTestersNames').value = data.additionalTestersNames || data.planAdditionalTesters || '';
             document.getElementById('planCount').value = data.planCount || 5;
             document.getElementById('areaCode').value = data.areaCode || '';
+            document.getElementById('supervisorPhone').value = data.supervisorPhone || '';
             examinees = data.examinees || [];
             planRows = data.planRows || [];
             testerRows = data.testerRows || [];
@@ -2192,6 +2203,7 @@
             additionalTestersNames: document.getElementById('additionalTestersNames').value,
             planCount: document.getElementById('planCount').value,
             areaCode: document.getElementById('areaCode').value,
+            supervisorPhone: document.getElementById('supervisorPhone').value,
             examinees: examinees,
             planRows: planRows,
             testerRows: testerRows,
@@ -3649,6 +3661,17 @@
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
+    // נרמול מספר טלפון ישראלי לפורמט בינלאומי לוואטסאפ (ללא + ו-0 מקדים)
+    // דוגמאות: "050-1234567" -> "972501234567", "+972501234567" -> "972501234567"
+    function normalizeIsraeliPhone(input) {
+        if (!input) return '';
+        const digits = input.replace(/\D/g, ''); // השאר רק ספרות
+        if (digits.startsWith('972')) return digits;        // 972501234567
+        if (digits.startsWith('0')) return '972' + digits.slice(1); // 0501234567 -> 972501234567
+        if (digits.length === 9) return '972' + digits;     // 501234567 -> 972501234567
+        return digits;
+    }
+
     // שליחת דו"ח לרב בוחן - הודעת וואטסאפ
     function sendReportToSupervisor() {
         const date = document.getElementById('planDate').value || '';
@@ -3744,7 +3767,14 @@
 
         msg += `\n🕐 ${new Date().toLocaleTimeString('he-IL', {hour: '2-digit', minute: '2-digit'})}`;
 
-        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+        // אם נשמר מספר רב בוחן - פתח שיחה ישירה איתו. אחרת התנהגות ישנה (בחירת איש קשר ידנית).
+        const phone = normalizeIsraeliPhone(document.getElementById('supervisorPhone')?.value || '');
+        const encodedMsg = encodeURIComponent(msg);
+        if (phone) {
+            window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank');
+        } else {
+            window.open(`https://api.whatsapp.com/send?text=${encodedMsg}`, '_blank');
+        }
     }
 
     // שליחת נתונים לגיליון Google Sheets המרכזי
