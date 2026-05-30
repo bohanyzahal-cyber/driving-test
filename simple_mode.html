@@ -3042,37 +3042,77 @@
         updateFailureSummarySuggestion();
     }
 
-    // בונה משפט מסכם רציף מהסעיפים שסומנו ✗ או ⊗ בטופס הכישלון.
-    // מציג רק את שמות הסעיפים בצורה רציפה - הסיבות והפירוט המלא נשלחים
-    // ממילא בנפרד דרך תיבת ההערות, כך שאין צורך לחזור עליהם כאן.
+    // מיפוי סעיפי הכישלון לתמות עיוניות - לסיכום שמראה את שורש הבעיה
+    // (במקום לרשום סעיפים, אומר מה התמה הדומיננטית)
+    const itemToTheme = {
+        // תשומת לב והסתכלות
+        "16. זהירות": "attention", "17. הסתכלות": "attention", "18. שימוש במראות": "attention",
+        "26. נהיגת לילה/אורות": "attention", "36. התייחסות להולכי רגל": "attention",
+        // שליטה טכנית ברכב
+        "1. התחלת נסיעה": "control", "2. שליטה בהגה": "control", "3. שימוש במצמד/גלישה": "control",
+        "4. החלפת הילוכים במועד": "control", "5. זינוק בעליה": "control", "6. שימוש בבלם רגל/יד": "control",
+        "7. שליטה כללית ברכב": "control", "9. נסיעה לאחור (חניה)": "control",
+        "10. עצירת מטרה": "control", "11. שימוש בבלמי האטה": "control",
+        "12. מחוונים ואזהרה": "control", "13. אביזרי בטיחות": "control",
+        "14. נסיעה לאחור בזווית": "control", "15. התרת ורתימת גרור": "control",
+        // משמעת תנועה
+        "8. איתות": "discipline", "19. השתלבות בתנועה": "discipline",
+        "20. מתן זכות קדימה": "discipline", "31. משמעת בנתיבים": "discipline",
+        "32. ציות לתמרורים": "discipline", "33. ציות לרמזורים": "discipline",
+        "34. נסיעה בימין הדרך": "discipline",
+        // שיקול דעת ובטיחות
+        "21. מהירות": "judgment", "22. קצב נסיעה": "judgment", "23. שמירת רווח": "judgment",
+        "24. אומדן רוחב": "judgment", "25. עקיפות/נאקף": "judgment", "27. ירידה לשול": "judgment",
+        "35. דרך שאינה עירונית": "judgment", "37. נתיב האצה/האטה": "judgment", "39. כביש רטוב": "judgment",
+        // ביצוע תמרונים
+        "28. פניות ימינה": "maneuvers", "29. פניות שמאלה": "maneuvers",
+        "30. מיקום במפגשים": "maneuvers", "38. נהיגה בדרך צרה": "maneuvers",
+    };
+
+    // ניסוח עברי לכל תמה - שתי גרסאות (יחיד/מודגש לתמה דומיננטית, ורגיל לתמות משניות)
+    const themePhrases = {
+        attention: { main: "חוסר תשומת לב לסביבת הנהיגה", side: "תשומת לב לסביבה" },
+        control:   { main: "שליטה לקויה ברכב",            side: "שליטה ברכב" },
+        discipline:{ main: "חוסר משמעת תנועה",            side: "משמעת תנועה" },
+        judgment:  { main: "שיקול דעת לקוי בנהיגה",        side: "שיקול דעת" },
+        maneuvers: { main: "ביצוע לקוי של תמרונים",        side: "ביצוע תמרונים" },
+    };
+
+    // בונה משפט מסכם המראה את שורש הכישלון - תמה דומיננטית + תמות משניות אם יש
     function generateFailureSummarySentence() {
-        // אסוף את שמות הסעיפים שנכשלו (בלי סיבות, רק שם נקי)
-        const failedSections = [];
+        // ספור כשלים לפי תמה
+        const themeCounts = {};
         document.querySelectorAll('.failure-item').forEach(item => {
             const xBtn = item.querySelector('.btn-mark.selected-x, .btn-mark.selected-ox');
             if (!xBtn) return;
-            const cleanItemText = (item.querySelector('.failure-item-text')?.textContent || '').trim();
-            if (cleanItemText && !failedSections.includes(cleanItemText)) {
-                failedSections.push(cleanItemText);
-            }
+            const theme = itemToTheme[item.dataset.item];
+            if (!theme) return;
+            themeCounts[theme] = (themeCounts[theme] || 0) + 1;
         });
 
-        if (failedSections.length === 0) return '';
+        const themes = Object.keys(themeCounts);
+        if (themes.length === 0) return '';
 
-        // חיבור עברי טבעי: "X" / "X ו-Y" / "X, Y ו-Z"
-        let joined;
-        if (failedSections.length === 1) {
-            joined = failedSections[0];
-        } else if (failedSections.length === 2) {
-            joined = `${failedSections[0]} ו${failedSections[1]}`;
+        // מיין לפי מספר הכשלים (גבוה ראשון) - הדומיננטי בראש
+        themes.sort((a, b) => themeCounts[b] - themeCounts[a]);
+
+        const mainTheme = themes[0];
+        const sideThemes = themes.slice(1);
+
+        // משפט בסיסי לפי תמה דומיננטית
+        let sentence = `הנבחן לא עמד בדרישות המבחן המעשי עקב ${themePhrases[mainTheme].main}`;
+
+        if (sideThemes.length === 0) {
+            sentence += '.';
+        } else if (sideThemes.length === 1) {
+            sentence += `, יחד עם בעיות ב${themePhrases[sideThemes[0]].side}.`;
         } else {
-            const last = failedSections[failedSections.length - 1];
-            joined = `${failedSections.slice(0, -1).join(', ')} ו${last}`;
+            const sidePhrasesText = sideThemes.map(t => themePhrases[t].side);
+            const last = sidePhrasesText.pop();
+            sentence += `, יחד עם בעיות ב${sidePhrasesText.join(', ב')} וב${last}.`;
         }
 
-        // משפט בודד מסכם - בלי פירוט סיבות (אלה כבר בהערות הבוחן)
-        const noun = failedSections.length === 1 ? 'כשל בנושא' : 'כשלים בנושאים';
-        return `הנבחן לא עמד בדרישות המבחן המעשי עקב ${noun}: ${joined}.`;
+        return sentence;
     }
 
     // מעדכן את הקופסה הצהובה בניסוח המוצע
