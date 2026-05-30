@@ -1324,6 +1324,16 @@
                 <textarea class="notes-area" id="failureNotes" placeholder="הערות יופיעו כאן אוטומטית..."></textarea>
             </div>
 
+            <!-- ניסוח מוצע אוטומטית: נבנה מתוך הסעיפים המסומנים בלחיצה -->
+            <div class="notes-section" style="background: #fff8e1; border: 2px solid #ffa726; border-radius: 8px; padding: 12px; margin-top: 12px;">
+                <label style="font-weight: bold; display: block; margin-bottom: 5px; color: #e65100;">💡 ניסוח מוצע (פורמלי):</label>
+                <div id="failureSummarySuggestion" style="background: white; padding: 10px; border-radius: 5px; min-height: 50px; font-size: 14px; line-height: 1.6;">סמן סעיפים שנכשלו כדי לקבל ניסוח אוטומטי...</div>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button type="button" id="copySuggestionBtn" onclick="copySuggestionToClipboard()" style="flex: 1; padding: 10px; background: #ffa726; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">📋 העתק ללוח</button>
+                    <button type="button" id="appendSuggestionBtn" onclick="appendSuggestionToNotes()" style="flex: 1; padding: 10px; background: #66bb6a; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">⬆ הוסף להערות</button>
+                </div>
+            </div>
+
             <div class="signature-section">
                 <label style="font-weight: bold; display: block; margin-bottom: 10px;">חתימת הבוחן:</label>
                 <canvas id="sigCanvas" width="280" height="80"></canvas>
@@ -3028,6 +3038,128 @@
             }
         });
         document.getElementById('failureNotes').value = notes;
+        // עדכן גם את הניסוח המוצע
+        updateFailureSummarySuggestion();
+    }
+
+    // בונה ניסוח פורמלי (משפטי) מהסעיפים שסומנו ✗ או ⊗ בטופס הכישלון.
+    // עוטף לפי הקטגוריות הראשיות (א/ב/ג) ומחבר עם מילות חיבור עבריות.
+    function generateFailureSummarySentence() {
+        // אסוף את הסעיפים שנכשלו, מקובצים לפי הקטגוריה הראשית
+        const failedByCategory = {}; // { "א. שליטה ברכב": { "שליטה בהגה": ["אחיזה רפויה"], ... }, ... }
+
+        document.querySelectorAll('.failure-item').forEach(item => {
+            const xBtn = item.querySelector('.btn-mark.selected-x, .btn-mark.selected-ox');
+            if (!xBtn) return;
+
+            const itemKey = item.dataset.item; // למשל "2. שליטה בהגה"
+            const cleanItemText = (item.querySelector('.failure-item-text')?.textContent || '').trim();
+
+            // מצא לאיזו קטגוריה ראשית הסעיף שייך
+            let categoryName = null;
+            for (const cat in categoryGroups) {
+                if (categoryGroups[cat].includes(itemKey)) {
+                    categoryName = cat;
+                    break;
+                }
+            }
+            if (!categoryName) return;
+
+            // אסוף סיבות נבחרות (אם יש)
+            const reasonsDiv = item.querySelector('.reasons-dropdown');
+            const reasons = [];
+            if (reasonsDiv) {
+                reasonsDiv.querySelectorAll('.reason-chip.selected').forEach(chip => {
+                    reasons.push(chip.textContent.trim());
+                });
+            }
+
+            if (!failedByCategory[categoryName]) failedByCategory[categoryName] = {};
+            failedByCategory[categoryName][cleanItemText] = reasons;
+        });
+
+        const categoryNames = Object.keys(failedByCategory);
+        if (categoryNames.length === 0) return '';
+
+        // הסרת התווית "א. " ושל ה' הידיעה כדי שאות ב' של מקום תתחבר נכון:
+        // "ב. התנועה" -> "תנועה" -> "בתנועה" (לא "בהתנועה")
+        const stripCatPrefix = (cat) => {
+            const clean = cat.replace(/^[א-ת]\.\s*/, '');
+            return clean.startsWith('ה') ? clean.substring(1) : clean;
+        };
+
+        // בונה משפט עבור קטגוריה אחת: "[קטגוריה] - [סעיף1] (סיבות), [סעיף2]"
+        const buildCategoryPhrase = (catName) => {
+            const items = failedByCategory[catName];
+            const itemNames = Object.keys(items);
+            const itemPhrases = itemNames.map(name => {
+                const reasons = items[name];
+                return reasons.length > 0 ? `${name} (${reasons.join(', ')})` : name;
+            });
+            // חיבור הסעיפים בקטגוריה (בלי מקף ב-ו' החיבור)
+            let joined;
+            if (itemPhrases.length === 1) joined = itemPhrases[0];
+            else if (itemPhrases.length === 2) joined = `${itemPhrases[0]} ו${itemPhrases[1]}`;
+            else {
+                const last = itemPhrases[itemPhrases.length - 1];
+                joined = itemPhrases.slice(0, -1).join('; ') + `; וכן ${last}`;
+            }
+            return `ב${stripCatPrefix(catName)} - ${joined}`;
+        };
+
+        const categoryPhrases = categoryNames.map(buildCategoryPhrase);
+
+        // חיבור בין הקטגוריות
+        const prefix = 'הנבחן לא עמד בדרישות המבחן המעשי עקב';
+        if (categoryPhrases.length === 1) {
+            return `${prefix} כשלים ${categoryPhrases[0]}.`;
+        } else if (categoryPhrases.length === 2) {
+            return `${prefix} כשלים בתחומים הבאים: ${categoryPhrases[0]}; וכן ${categoryPhrases[1]}.`;
+        } else {
+            const last = categoryPhrases[categoryPhrases.length - 1];
+            return `${prefix} כשלים בתחומים הבאים: ${categoryPhrases.slice(0, -1).join('; ')}; וכן ${last}.`;
+        }
+    }
+
+    // מעדכן את הקופסה הצהובה בניסוח המוצע
+    function updateFailureSummarySuggestion() {
+        const sentence = generateFailureSummarySentence();
+        const box = document.getElementById('failureSummarySuggestion');
+        if (!box) return;
+        if (sentence) {
+            box.textContent = sentence;
+            box.style.color = '#212121';
+            box.style.fontStyle = 'normal';
+        } else {
+            box.textContent = 'סמן סעיפים שנכשלו כדי לקבל ניסוח אוטומטי...';
+            box.style.color = '#888';
+            box.style.fontStyle = 'italic';
+        }
+    }
+
+    function copySuggestionToClipboard() {
+        const sentence = generateFailureSummarySentence();
+        if (!sentence) { alert('אין סעיפים מסומנים - אין מה להעתיק'); return; }
+        navigator.clipboard.writeText(sentence).then(() => {
+            const btn = document.getElementById('copySuggestionBtn');
+            const original = btn.textContent;
+            btn.textContent = '✓ הועתק';
+            setTimeout(() => { btn.textContent = original; }, 1500);
+        }).catch(() => {
+            prompt('העתק את הטקסט:', sentence);
+        });
+    }
+
+    function appendSuggestionToNotes() {
+        const sentence = generateFailureSummarySentence();
+        if (!sentence) { alert('אין סעיפים מסומנים'); return; }
+        const notesEl = document.getElementById('failureNotes');
+        const existing = notesEl.value.trim();
+        notesEl.value = existing ? `${existing}\n\n${sentence}` : sentence;
+        const btn = document.getElementById('appendSuggestionBtn');
+        const original = btn.textContent;
+        btn.textContent = '✓ נוסף';
+        setTimeout(() => { btn.textContent = original; }, 1500);
     }
 
     // ============ SIGNATURE ============
