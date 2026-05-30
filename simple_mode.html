@@ -3081,14 +3081,16 @@
     // בונה משפט מסכם המראה את שורש הכישלון - תמה דומיננטית + תמות משניות אם יש
     // מוסיף משפט קריטי על התערבות אם הבוחן סימן סיבה עם "התערבות" או הקליד "התערבתי"
     function generateFailureSummarySentence() {
-        // ספור כשלים לפי תמה
+        // ספור כשלים לפי תמה ואסוף את הסעיפים המסומנים לקביעת סיבת ההתערבות
         const themeCounts = {};
+        const failedItemKeys = new Set();
         let hadIntervention = false;
         const checkIntervention = (text) => /התערב/.test(text || '');
 
         document.querySelectorAll('.failure-item').forEach(item => {
             const xBtn = item.querySelector('.btn-mark.selected-x, .btn-mark.selected-ox');
             if (!xBtn) return;
+            failedItemKeys.add(item.dataset.item);
             const theme = itemToTheme[item.dataset.item];
             if (theme) themeCounts[theme] = (themeCounts[theme] || 0) + 1;
             // בדוק אם אחת מהסיבות הנבחרות מכילה "התערבות"/"התערבתי"
@@ -3100,6 +3102,16 @@
         // בדוק גם בתיבת ההערות הידנית (במקרה שהבוחן הוסיף הערה משלו)
         const notesEl = document.getElementById('failureNotes');
         if (notesEl && checkIntervention(notesEl.value)) hadIntervention = true;
+
+        // קביעת סיבה ספציפית להתערבות לפי ההקשר (לא רשימה של כל הסיבות האפשריות):
+        // 1) אם נכשל ב"הולכי רגל" - סיכון לעוברי דרך אחרים
+        // 2) אם נכשל בעצירה/רמזור - עבירה על החוק
+        // 3) ברירת מחדל - תאונה
+        const interventionReason = (() => {
+            if (failedItemKeys.has('36. התייחסות להולכי רגל')) return 'סיכון לעוברי דרך אחרים';
+            if (failedItemKeys.has('32. ציות לתמרורים') || failedItemKeys.has('33. ציות לרמזורים')) return 'עבירה על החוק';
+            return 'תאונה';
+        })();
 
         const themes = Object.keys(themeCounts);
         if (themes.length === 0) return '';
@@ -3123,9 +3135,9 @@
             sentence += `, יחד עם בעיות ב${sidePhrasesText.join(', ב')} וב${last}.`;
         }
 
-        // משפט קריטי שמתווסף כשנדרשה התערבות פיזית - לפי בקשת המשתמש
+        // משפט קריטי שמתווסף כשנדרשה התערבות פיזית - עם סיבה ספציפית להקשר
         if (hadIntervention) {
-            sentence += ' בנוסף, התערבתי על מנת למנוע תאונה, עבירה על החוק או סיכון לעוברי דרך אחרים.';
+            sentence += ` בנוסף, התערבתי על מנת למנוע ${interventionReason}.`;
         }
 
         return sentence;
