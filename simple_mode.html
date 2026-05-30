@@ -3079,16 +3079,27 @@
     };
 
     // בונה משפט מסכם המראה את שורש הכישלון - תמה דומיננטית + תמות משניות אם יש
+    // מוסיף משפט קריטי על התערבות אם הבוחן סימן סיבה עם "התערבות" או הקליד "התערבתי"
     function generateFailureSummarySentence() {
         // ספור כשלים לפי תמה
         const themeCounts = {};
+        let hadIntervention = false;
+        const checkIntervention = (text) => /התערב/.test(text || '');
+
         document.querySelectorAll('.failure-item').forEach(item => {
             const xBtn = item.querySelector('.btn-mark.selected-x, .btn-mark.selected-ox');
             if (!xBtn) return;
             const theme = itemToTheme[item.dataset.item];
-            if (!theme) return;
-            themeCounts[theme] = (themeCounts[theme] || 0) + 1;
+            if (theme) themeCounts[theme] = (themeCounts[theme] || 0) + 1;
+            // בדוק אם אחת מהסיבות הנבחרות מכילה "התערבות"/"התערבתי"
+            item.querySelectorAll('.reason-chip.selected').forEach(chip => {
+                if (checkIntervention(chip.textContent)) hadIntervention = true;
+            });
         });
+
+        // בדוק גם בתיבת ההערות הידנית (במקרה שהבוחן הוסיף הערה משלו)
+        const notesEl = document.getElementById('failureNotes');
+        if (notesEl && checkIntervention(notesEl.value)) hadIntervention = true;
 
         const themes = Object.keys(themeCounts);
         if (themes.length === 0) return '';
@@ -3110,6 +3121,11 @@
             const sidePhrasesText = sideThemes.map(t => themePhrases[t].side);
             const last = sidePhrasesText.pop();
             sentence += `, יחד עם בעיות ב${sidePhrasesText.join(', ב')} וב${last}.`;
+        }
+
+        // משפט קריטי שמתווסף כשנדרשה התערבות פיזית - לפי בקשת המשתמש
+        if (hadIntervention) {
+            sentence += ' בנוסף, התערבתי על מנת למנוע תאונה, עבירה על החוק או סיכון לעוברי דרך אחרים.';
         }
 
         return sentence;
