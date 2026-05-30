@@ -3042,83 +3042,37 @@
         updateFailureSummarySuggestion();
     }
 
-    // בונה ניסוח פורמלי (משפטי) מהסעיפים שסומנו ✗ או ⊗ בטופס הכישלון.
-    // עוטף לפי הקטגוריות הראשיות (א/ב/ג) ומחבר עם מילות חיבור עבריות.
+    // בונה משפט מסכם רציף מהסעיפים שסומנו ✗ או ⊗ בטופס הכישלון.
+    // מציג רק את שמות הסעיפים בצורה רציפה - הסיבות והפירוט המלא נשלחים
+    // ממילא בנפרד דרך תיבת ההערות, כך שאין צורך לחזור עליהם כאן.
     function generateFailureSummarySentence() {
-        // אסוף את הסעיפים שנכשלו, מקובצים לפי הקטגוריה הראשית
-        const failedByCategory = {}; // { "א. שליטה ברכב": { "שליטה בהגה": ["אחיזה רפויה"], ... }, ... }
-
+        // אסוף את שמות הסעיפים שנכשלו (בלי סיבות, רק שם נקי)
+        const failedSections = [];
         document.querySelectorAll('.failure-item').forEach(item => {
             const xBtn = item.querySelector('.btn-mark.selected-x, .btn-mark.selected-ox');
             if (!xBtn) return;
-
-            const itemKey = item.dataset.item; // למשל "2. שליטה בהגה"
             const cleanItemText = (item.querySelector('.failure-item-text')?.textContent || '').trim();
-
-            // מצא לאיזו קטגוריה ראשית הסעיף שייך
-            let categoryName = null;
-            for (const cat in categoryGroups) {
-                if (categoryGroups[cat].includes(itemKey)) {
-                    categoryName = cat;
-                    break;
-                }
+            if (cleanItemText && !failedSections.includes(cleanItemText)) {
+                failedSections.push(cleanItemText);
             }
-            if (!categoryName) return;
-
-            // אסוף סיבות נבחרות (אם יש)
-            const reasonsDiv = item.querySelector('.reasons-dropdown');
-            const reasons = [];
-            if (reasonsDiv) {
-                reasonsDiv.querySelectorAll('.reason-chip.selected').forEach(chip => {
-                    reasons.push(chip.textContent.trim());
-                });
-            }
-
-            if (!failedByCategory[categoryName]) failedByCategory[categoryName] = {};
-            failedByCategory[categoryName][cleanItemText] = reasons;
         });
 
-        const categoryNames = Object.keys(failedByCategory);
-        if (categoryNames.length === 0) return '';
+        if (failedSections.length === 0) return '';
 
-        // הסרת התווית "א. " ושל ה' הידיעה כדי שאות ב' של מקום תתחבר נכון:
-        // "ב. התנועה" -> "תנועה" -> "בתנועה" (לא "בהתנועה")
-        const stripCatPrefix = (cat) => {
-            const clean = cat.replace(/^[א-ת]\.\s*/, '');
-            return clean.startsWith('ה') ? clean.substring(1) : clean;
-        };
-
-        // בונה משפט עבור קטגוריה אחת: "[קטגוריה] - [סעיף1] (סיבות), [סעיף2]"
-        const buildCategoryPhrase = (catName) => {
-            const items = failedByCategory[catName];
-            const itemNames = Object.keys(items);
-            const itemPhrases = itemNames.map(name => {
-                const reasons = items[name];
-                return reasons.length > 0 ? `${name} (${reasons.join(', ')})` : name;
-            });
-            // חיבור הסעיפים בקטגוריה (בלי מקף ב-ו' החיבור)
-            let joined;
-            if (itemPhrases.length === 1) joined = itemPhrases[0];
-            else if (itemPhrases.length === 2) joined = `${itemPhrases[0]} ו${itemPhrases[1]}`;
-            else {
-                const last = itemPhrases[itemPhrases.length - 1];
-                joined = itemPhrases.slice(0, -1).join('; ') + `; וכן ${last}`;
-            }
-            return `ב${stripCatPrefix(catName)} - ${joined}`;
-        };
-
-        const categoryPhrases = categoryNames.map(buildCategoryPhrase);
-
-        // חיבור בין הקטגוריות
-        const prefix = 'הנבחן לא עמד בדרישות המבחן המעשי עקב';
-        if (categoryPhrases.length === 1) {
-            return `${prefix} כשלים ${categoryPhrases[0]}.`;
-        } else if (categoryPhrases.length === 2) {
-            return `${prefix} כשלים בתחומים הבאים: ${categoryPhrases[0]}; וכן ${categoryPhrases[1]}.`;
+        // חיבור עברי טבעי: "X" / "X ו-Y" / "X, Y ו-Z"
+        let joined;
+        if (failedSections.length === 1) {
+            joined = failedSections[0];
+        } else if (failedSections.length === 2) {
+            joined = `${failedSections[0]} ו${failedSections[1]}`;
         } else {
-            const last = categoryPhrases[categoryPhrases.length - 1];
-            return `${prefix} כשלים בתחומים הבאים: ${categoryPhrases.slice(0, -1).join('; ')}; וכן ${last}.`;
+            const last = failedSections[failedSections.length - 1];
+            joined = `${failedSections.slice(0, -1).join(', ')} ו${last}`;
         }
+
+        // משפט בודד מסכם - בלי פירוט סיבות (אלה כבר בהערות הבוחן)
+        const noun = failedSections.length === 1 ? 'כשל בנושא' : 'כשלים בנושאים';
+        return `הנבחן לא עמד בדרישות המבחן המעשי עקב ${noun}: ${joined}.`;
     }
 
     // מעדכן את הקופסה הצהובה בניסוח המוצע
