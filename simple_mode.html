@@ -3069,14 +3069,27 @@
         "30. מיקום במפגשים": "maneuvers", "38. נהיגה בדרך צרה": "maneuvers",
     };
 
-    // ניסוח עברי לכל תמה - שתי גרסאות (יחיד/מודגש לתמה דומיננטית, ורגיל לתמות משניות)
+    // לכל תמה - הנחיית תרגול מעשית למורה הנהיגה (מה ללמד לקראת המבחן הבא),
+    // לא אבחנה כללית. זה הופך את המשפט מתיאור הכישלון להוראה אופרטיבית.
     const themePhrases = {
-        attention: { main: "חוסר תשומת לב לסביבת הנהיגה", side: "תשומת לב לסביבה" },
-        control:   { main: "שליטה לקויה ברכב",            side: "שליטה ברכב" },
-        discipline:{ main: "חוסר משמעת תנועה",            side: "משמעת תנועה" },
-        judgment:  { main: "שיקול דעת לקוי בנהיגה",        side: "שיקול דעת" },
-        maneuvers: { main: "ביצוע לקוי של תמרונים",        side: "ביצוע תמרונים" },
+        attention:  "סריקת הסביבה ושימוש עקבי במראות לפני כל פעולה - פנייה, בלימה ומעבר נתיב",
+        control:    "שליטה טכנית ברכב - היגוי מדויק ללא תיקוני יתר, זינוק בעלייה ותפעול חלק",
+        discipline: "ציות לחוקי התנועה - איתות בזמן, מתן זכות קדימה ומשמעת בנתיבים",
+        judgment:   "התאמת מהירות הנסיעה לתנאי הדרך ושמירת מרחק ומרווחי ביטחון",
+        maneuvers:  "ביצוע נכון ובטוח של פניות, צמתים ומעגלי תנועה",
     };
+
+    // מילות מפתח לזיהוי תמה מתוך ההערה הידנית של הבוחן (כשהוא כתב חופשי
+    // ולא סימן סעיף). מאפשר שהסיכום יתפוס גם מה שהבוחן רשם במילים שלו.
+    const noteKeywordsToTheme = {
+        attention:  ['הסתכלות', 'מראות', 'מראה', 'סריק', 'מבט'],
+        control:    ['הגה', 'מצמד', 'הילוך', 'זינוק', 'תפעול', 'בלם'],
+        discipline: ['איתות', 'זכות קדימה', 'משמעת', 'השתלב', 'רמזור', 'תמרור'],
+        judgment:   ['מהירות', 'מרחק', 'רווח', 'עקיפ'],
+        maneuvers:  ['פניה', 'פנייה', 'פניות', 'צומת', 'צמתים', 'מעגל', 'תמרון'],
+    };
+
+    const MAX_THEMES_IN_SUMMARY = 3; // מציגים עד 3 תחומים מרכזיים כדי שהמשפט יישאר קריא
 
     // בונה משפט מסכם המראה את שורש הכישלון - תמה דומיננטית + תמות משניות אם יש
     // מוסיף משפט קריטי על התערבות אם הבוחן סימן סיבה עם "התערבות" או הקליד "התערבתי"
@@ -3101,7 +3114,20 @@
 
         // בדוק גם בתיבת ההערות הידנית (במקרה שהבוחן הוסיף הערה משלו)
         const notesEl = document.getElementById('failureNotes');
-        if (notesEl && checkIntervention(notesEl.value)) hadIntervention = true;
+        const notesText = notesEl ? notesEl.value : '';
+        if (checkIntervention(notesText)) hadIntervention = true;
+
+        // סרוק את ההערה הידנית למילות מפתח - כך נתפוס תמות שהבוחן רשם
+        // במילים שלו בלי לסמן סעיף (למשל "הסתכלות לימין מאוחרת").
+        // מוסיף רק תמה שעוד לא סומנה, כדי שהסעיפים המסומנים יישארו דומיננטיים.
+        if (notesText) {
+            for (const theme in noteKeywordsToTheme) {
+                if (themeCounts[theme]) continue; // כבר נספר מסעיף מסומן
+                if (noteKeywordsToTheme[theme].some(kw => notesText.includes(kw))) {
+                    themeCounts[theme] = 1;
+                }
+            }
+        }
 
         // קביעת סיבה ספציפית להתערבות לפי ההקשר (לא רשימה של כל הסיבות האפשריות):
         // 1) אם נכשל ב"הולכי רגל" - סיכון לעוברי דרך אחרים
@@ -3119,25 +3145,28 @@
         // מיין לפי מספר הכשלים (גבוה ראשון) - הדומיננטי בראש
         themes.sort((a, b) => themeCounts[b] - themeCounts[a]);
 
-        const mainTheme = themes[0];
-        const sideThemes = themes.slice(1);
+        // הגבל ל-3 התחומים המרכזיים כדי שהמשפט יישאר קריא (גם כשיש הרבה כשלים)
+        const topThemes = themes.slice(0, MAX_THEMES_IN_SUMMARY);
+        const directives = topThemes.map(t => themePhrases[t]);
 
-        // משפט בסיסי לפי תמה דומיננטית
-        let sentence = `הנבחן לא עמד בדרישות המבחן המעשי עקב ${themePhrases[mainTheme].main}`;
+        // משפט פתיחה אופרטיבי - מה על המורה ללמד
+        let sentence = 'לקראת המבחן הבא, מומלץ להתמקד בעיקר בתרגול: ';
 
-        if (sideThemes.length === 0) {
-            sentence += '.';
-        } else if (sideThemes.length === 1) {
-            sentence += `, יחד עם בעיות ב${themePhrases[sideThemes[0]].side}.`;
+        if (directives.length === 1) {
+            sentence += `${directives[0]}.`;
         } else {
-            const sidePhrasesText = sideThemes.map(t => themePhrases[t].side);
-            const last = sidePhrasesText.pop();
-            sentence += `, יחד עם בעיות ב${sidePhrasesText.join(', ב')} וב${last}.`;
+            const last = directives[directives.length - 1];
+            sentence += `${directives.slice(0, -1).join('; ')}; וכן ${last}.`;
         }
 
-        // משפט קריטי שמתווסף כשנדרשה התערבות פיזית - עם סיבה ספציפית להקשר
+        // אם היו יותר תחומים ממה שהוצג - מפנים לרשימת הסעיפים המלאה
+        if (themes.length > MAX_THEMES_IN_SUMMARY) {
+            sentence += ' (אלו התחומים המרכזיים; הפירוט המלא מופיע ברשימת הסעיפים שמעלה).';
+        }
+
+        // אם נדרשה התערבות בטיחותית - מציינים זאת במפורש כי זו אינדיקציה לחומרה
         if (hadIntervention) {
-            sentence += ` בנוסף, התערבתי על מנת למנוע ${interventionReason}.`;
+            sentence += ` יש לשים לב: במהלך המבחן נדרשה התערבות הבוחן למניעת ${interventionReason}.`;
         }
 
         return sentence;
